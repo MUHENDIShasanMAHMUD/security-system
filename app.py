@@ -13,29 +13,20 @@ def init_db():
     conn.commit()
     conn.close()
 
+import urllib.request
+from urllib.parse import quote
+
 def send_telegram_alert(message):
     token = "8828447054:AAEBhzOFYXtn1IT83BDpz4LtZnAQwbhmzBs"
     chat_id = "7367505782"
-    
-    from urllib.parse import quote
-    msg_encoded = quote(message)
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={msg_encoded}"
-    
-    # تعريف بروكسي عام لتجاوز حظر الـ DNS
-    proxies = {
-        'http': 'http://51.158.117.88:8811',
-        'https': 'http://51.158.117.88:8811'
-    }
+    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={quote(message)}"
     
     try:
-        # إضافة proxies و timeout
-        response = requests.get(url, proxies=proxies, timeout=10)
-        if response.status_code == 200:
-            print("Telegram Alert Sent via Proxy!")
-        else:
-            print(f"Telegram Failed, Status: {response.status_code}")
+        # استخدام المكتبة الأساسية المدمجة في بايثون
+        with urllib.request.urlopen(url, timeout=10) as response:
+            return response.read()
     except Exception as e:
-        print("Telegram Alert Error:", e)
+        print("Final attempt error:", e)
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
