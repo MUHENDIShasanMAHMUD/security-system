@@ -16,17 +16,6 @@ def init_db():
 import urllib.request
 from urllib.parse import quote
 
-def send_telegram_alert(message):
-    token = "8828447054:AAEBhzOFYXtn1IT83BDpz4LtZnAQwbhmzBs"
-    chat_id = "7367505782"
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={quote(message)}"
-    
-    try:
-        # استخدام المكتبة الأساسية المدمجة في بايثون
-        with urllib.request.urlopen(url, timeout=10) as response:
-            return response.read()
-    except Exception as e:
-        print("Final attempt error:", e)
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
@@ -45,12 +34,6 @@ def receive_data():
     # تحديث واجهة المستخدم عبر السوكت
     socketio.emit('sensor_update', data)
     
-    # إرسال تنبيه تليجرام إذا كان هناك خطر حقيقي (alarm == True)
-    if data.get('alarm'):
-        alert_msg = f"🚨 تنبيه أمني! تم اكتشاف جسم على مسافة: {data['distance']} سم"
-        send_telegram_alert(alert_msg)
-        
-    return jsonify({'status': 'success'}), 201
 
 if __name__ == '__main__':
     init_db()
