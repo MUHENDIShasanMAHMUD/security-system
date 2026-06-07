@@ -14,9 +14,11 @@ def init_db():
     conn.close()
 
 def send_telegram_alert(message):
-    # لا تنسَ لاحقاً تغيير هذه القيم بالتوكن والـ ID الحقيقيين الخاصين بك
-    token = "توكن_البوت_الخاص_بك"
-    chat_id = "الـ_ID_الخاص_بك"
+    # التوكن الذي نسخته من BotFather
+    token = "8828447054:AAEBhzOFYXtn1IT83BDpz4LtZnAQwbhmzBs"
+    # الـ ID الذي حصلت عليه للتو من GetIdsBot
+    chat_id = "7367505782" 
+    
     url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}"
     try:
         requests.get(url)
