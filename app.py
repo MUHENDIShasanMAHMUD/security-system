@@ -1,4 +1,5 @@
 import sqlite3
+import requests
 from flask import Flask, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
 
@@ -9,7 +10,18 @@ DATABASE = 'security_system.db'
 def init_db():
     conn = sqlite3.connect(DATABASE)
     conn.execute('CREATE TABLE IF NOT EXISTS sensor_events (id INTEGER PRIMARY KEY, distance REAL, timestamp TEXT, alarm_status BOOLEAN)')
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
+
+def send_telegram_alert(message):
+    # لا تنسَ لاحقاً تغيير هذه القيم بالتوكن والـ ID الحقيقيين الخاصين بك
+    token = "توكن_البوت_الخاص_بك"
+    chat_id = "الـ_ID_الخاص_بك"
+    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}"
+    try:
+        requests.get(url)
+    except Exception as e:
+        print("Telegram Alert Error:", e)
 
 @app.route('/')
 def index():
@@ -19,21 +31,22 @@ def index():
 def receive_data():
     data = request.get_json()
     conn = sqlite3.connect(DATABASE)
+    
+    # إدخال البيانات في قاعدة البيانات
     conn.execute('INSERT INTO sensor_events (distance, timestamp, alarm_status) VALUES (?, ?, ?)', 
                  (data['distance'], data['timestamp'], data['alarm']))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
+    
+    # تحديث واجهة المستخدم عبر السوكت
     socketio.emit('sensor_update', data)
+    
+    # إرسال تنبيه تليجرام إذا كان هناك خطر حقيقي (alarm == True)
+    if data.get('alarm'):
+        alert_msg = f"🚨 تنبيه أمني! تم اكتشاف جسم على مسافة: {data['distance']} سم"
+        send_telegram_alert(alert_msg)
+        
     return jsonify({'status': 'success'}), 201
-import requests # تحتاج لتثبيت هذه المكتبة: pip install requests
-
-def send_telegram_alert(message):
-    token = "توكن_البوت_الخاص_بك"
-    chat_id = "الـ_ID_الخاص_بك"
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}"
-    requests.get(url)
-
-# داخل دالة receive_data في app.py
-@app.route('/api/sensor/data', methods=['POST'])
 
 if __name__ == '__main__':
     init_db()
