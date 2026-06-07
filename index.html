@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الأمان الذكي - Security System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+        
+        #app {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+    {% raw %}
+        ... (كل كود الـ HTML والـ Vue) ...
+    {% endraw %}
+    </div>
+    
+    <!-- Vue 3 + Socket.IO -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Load the component inline -->
+    <script>
+        const app = Vue.createApp({
+            template: `
+                <div class="security-dashboard">
+                    <!-- Header -->
+                    <header class="dashboard-header">
+                        <div class="header-content">
+                            <h1>🔒 نظام الأمان الذكي</h1>
+                            <div class="system-status" :class="alarmActive ? 'alarm-active' : 'normal'">
+                                <span class="status-dot"></span>
+                                {{ alarmActive ? '🚨 تنبيه نشط' : '✅ نظام طبيعي' }}
+                            </div>
+                        </div>
+                    </header>
+
+                    <!-- Main Metrics -->
+                    <section class="metrics-section">
+                        <div class="metric-card">
+                            <h3>المسافة الحالية</h3>
+                            <div class="metric-value" :class="lastDistance < 20 ? 'danger' : 'normal'">
+                                {{ lastDistance.toFixed(2) }} cm
+                            </div>
+                            <div class="threshold-info">عتبة التنبيه: 20 cm</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <h3>عدد التنبيهات</h3>
+                            <div class="metric-value">{{ statistics.total_alarms || 0 }}</div>
+                            <div class="threshold-info">آخر 7 أيام</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <h3>متوسط المسافة</h3>
+                            <div class="metric-value">{{ (statistics.average_distance || 0).toFixed(2) }} cm</div>
+                            <div class="threshold-info">من {{ statistics.total_events || 0 }} قراءة</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <h3>الحالة</h3>
+                            <div class="metric-value" :class="connectionStatus ? 'connected' : 'disconnected'">
+                                {{ connectionStatus ? '🟢 متصل' : '🔴 غير متصل' }}
+                            </div>
+                            <div class="threshold-info">خادم Flask</div>
+                        </div>
+                    </section>
+
+                    <!-- Live Data Table -->
+                    <section class="table-section">
+                        <h2>📊 البيانات الحية</h2>
+                        
+                        <div class="controls">
+                            <button @click="refreshData" class="btn btn-primary">🔄 تحديث</button>
+                            <button @click="clearData" class="btn btn-danger">🗑️ حذف البيانات</button>
+                            <select v-model.number="refreshInterval" @change="setupAutoRefresh" class="select-refresh">
+                                <option :value="1000">كل ثانية</option>
+                                <option :value="5000">كل 5 ثوان</option>
+                                <option :value="10000">كل 10 ثوان</option>
+                            </select>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>الرقم</th>
+                                        <th>المسافة (cm)</th>
+                                        <th>التاريخ والوقت</th>
+                                        <th>حالة التنبيه</th>
+                                        <th>الوقت المستقبل</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr 
+                                        v-for="(event, index) in sensorEvents" 
+                                        :key="event.id"
+                                        :class="event.alarm_status ? 'alert-row' : ''"
+                                    >
+                                        <td>{{ index + 1 }}</td>
+                                        <td>
+                                            <span class="distance-badge" :class="event.distance < 20 ? 'warning' : 'safe'">
+                                                {{ event.distance.toFixed(2) }}
+                                            </span>
+                                        </td>
+                                        <td>{{ event.timestamp }}</td>
+                                        <td>
+                                            <span class="status-badge" :class="event.alarm_status ? 'active' : 'inactive'">
+                                                {{ event.alarm_status ? '🔴 تنبيه' : '🟢 آمن' }}
+                                            </span>
+                                        </td>
+                                        <td>{{ formatTime(event.received_at) }}</td>
+                                    </tr>
+                                    <tr v-if="sensorEvents.length === 0">
+                                        <td colspan="5" class="no-data">لا توجد بيانات حالياً</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- Notifications -->
+                    <section v-if="notifications.length > 0" class="notifications">
+                        <h3>🔔 الإشعارات الأخيرة</h3>
+                        <div 
+                            v-for="(notif, index) in notifications" 
+                            :key="index"
+                            class="notification"
+                            :class="notif.type"
+                        >
+                            {{ notif.message }} - {{ notif.time }}
+                        </div>
+                    </section>
+
+                    <!-- Footer -->
+                    <footer class="dashboard-footer">
+                        <p>نظام الأمان الذكي v2.0 | آخر تحديث: {{ lastUpdate }}</p>
+                        <p>جميع البيانات مخزنة بشكل آمن في قاعدة البيانات</p>
+                    </footer>
+                </div>
+            `,
+            
+            data() {
+                return {
+                    sensorEvents: [],
+                    statistics: {
+                        total_events: 0,
+                        average_distance: 0,
+                        total_alarms: 0,
+                        avg_duration: 0
+                    },
+                    lastDistance: 0,
+                    lastUpdate: new Date().toLocaleTimeString('ar-SA'),
+                    alarmActive: false,
+                    connectionStatus: false,
+                    notifications: [],
+                    refreshInterval: 5000,
+                    socket: null,
+                    autoRefreshTimer: null
+                };
+            },
+            
+            mounted() {
+                this.initWebSocket();
+                this.refreshData();
+                this.setupAutoRefresh();
+            },
+
+            beforeUnmount() {
+                if (this.autoRefreshTimer) {
+                    clearInterval(this.autoRefreshTimer);
+                }
+                if (this.socket) {
+                    this.socket.disconnect();
+                }
+            },
+
+            methods: {
+                initWebSocket() {
+                    // 1. تحديد الرابط ديناميكياً: يعمل مع localhost ومع ngrok تلقائياً
+                    const serverUrl = window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+                    console.log("Connecting to WebSocket at:", serverUrl);
+
+                    // 2. الاتصال مع إعدادات الـ Transports لضمان الاستقرار في شبكات الجوال
+                    this.socket = io(serverUrl, {
+                        transports: ['websocket', 'polling'], // محاولة الاتصال بـ websocket أولاً، ثم polling كاحتياط
+                        reconnection: true,
+                        reconnectionDelay: 1000,
+                        reconnectionDelayMax: 5000,
+                        reconnectionAttempts: 10
+                    });
+
+                    this.socket.on('connect', () => {
+                        console.log('✓ WebSocket connected');
+                        this.connectionStatus = true;
+                        this.addNotification('✓ اتصال بالخادم نجح', 'success');
+                    });
+
+                    this.socket.on('disconnect', () => {
+                        console.log('✗ WebSocket disconnected');
+                        this.connectionStatus = false;
+                        this.addNotification('✗ فقدان الاتصال بالخادم', 'error');
+                    });
+
+                    this.socket.on('sensor_update', (data) => {
+                        this.lastDistance = data.distance;
+                        this.lastUpdate = new Date().toLocaleTimeString('ar-SA');
+                        
+                        // إضافة البيانات إلى الجدول
+                        this.sensorEvents.unshift({
+                            id: Date.now(),
+                            distance: data.distance,
+                            timestamp: data.timestamp,
+                            alarm_status: data.alarm,
+                            received_at: data.received_at
+                        });
+
+                        // حفظ آخر 100 عنصر فقط
+                        if (this.sensorEvents.length > 100) {
+                            this.sensorEvents.pop();
+                        }
+                    });
+
+                    this.socket.on('alarm_alert', (data) => {
+                        this.alarmActive = true;
+                        this.addNotification(`🚨 تنبيه! المسافة: ${data.distance.toFixed(2)} cm`, 'alarm');
+                        this.playAlarmSound();
+                    });
+
+                    this.socket.on('response', (data) => {
+                        console.log('Server:', data);
+                    });
+                },
+
+                setupAutoRefresh() {
+                    if (this.autoRefreshTimer) {
+                        clearInterval(this.autoRefreshTimer);
+                    }
+                    
+                    this.autoRefreshTimer = setInterval(() => {
+                        this.refreshData();
+                    }, this.refreshInterval);
+                },
+
+                async refreshData() {
+                    try {
+                        // جلب الأحداث الأخيرة
+                        const eventsResponse = await fetch('http://localhost:5000/api/events?limit=50');
+                        if (eventsResponse.ok) {
+                            this.sensorEvents = await eventsResponse.json();
+                            
+                            if (this.sensorEvents.length > 0) {
+                                this.lastDistance = this.sensorEvents[0].distance;
+                                this.alarmActive = this.sensorEvents[0].alarm_status;
+                            }
+                        }
+
+                        // جلب الإحصائيات
+                        const statsResponse = await fetch('http://localhost:5000/api/statistics');
+                        if (statsResponse.ok) {
+                            this.statistics = await statsResponse.json();
+                        }
+
+                        this.lastUpdate = new Date().toLocaleTimeString('ar-SA');
+                        this.connectionStatus = true;
+                    } catch (error) {
+                        console.error('❌ Error fetching data:', error);
+                        this.connectionStatus = false;
+                        this.addNotification('❌ خطأ في جلب البيانات', 'error');
+                    }
+                },
+
+                async clearData() {
+                    if (confirm('هل أنت متأكد من رغبتك في حذف جميع البيانات؟')) {
+                        try {
+                            const response = await fetch('http://localhost:5000/api/clear-data', {
+                                method: 'DELETE'
+                            });
+                            
+                            if (response.ok) {
+                                this.sensorEvents = [];
+                                this.addNotification('✓ تم حذف جميع البيانات', 'success');
+                                this.refreshData();
+                            }
+                        } catch (error) {
+                            console.error('❌ Error clearing data:', error);
+                            this.addNotification('❌ خطأ في حذف البيانات', 'error');
+                        }
+                    }
+                },
+
+                addNotification(message, type = 'info') {
+                    const notif = {
+                        message,
+                        type,
+                        time: new Date().toLocaleTimeString('ar-SA')
+                    };
+
+                    this.notifications.unshift(notif);
+
+                    if (this.notifications.length > 5) {
+                        this.notifications.pop();
+                    }
+
+                    setTimeout(() => {
+                        const index = this.notifications.indexOf(notif);
+                        if (index > -1) {
+                            this.notifications.splice(index, 1);
+                        }
+                    }, 5000);
+                },
+
+                formatTime(dateString) {
+                    try {
+                        const date = new Date(dateString);
+                        return date.toLocaleTimeString('ar-SA', { 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit' 
+                        });
+                    } catch {
+                        return dateString;
+                    }
+                },
+
+                playAlarmSound() {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+
+                    oscillator.frequency.value = 800;
+                    oscillator.type = 'sine';
+
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.5);
+                }
+            }
+        });
+
+        app.mount('#app');
+    </script>
+
+    <style>
+        .security-dashboard {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            direction: rtl;
+        }
+
+        .dashboard-header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2rem;
+            border-bottom: 3px solid #00d4ff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dashboard-header h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+
+        .system-status.normal {
+            background: rgba(0, 200, 83, 0.2);
+            border: 2px solid #00c853;
+        }
+
+        .system-status.alarm-active {
+            background: rgba(255, 0, 0, 0.3);
+            border: 2px solid #ff0000;
+            animation: pulse 1s infinite;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: blink 1s infinite;
+        }
+
+        .system-status.normal .status-dot {
+            background: #00c853;
+        }
+
+        .system-status.alarm-active .status-dot {
+            background: #ff0000;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.5; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .metrics-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 15px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(0, 212, 255, 0.6);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.2);
+        }
+
+        .metric-card h3 {
+            font-size: 0.95rem;
+            color: #00d4ff;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 1rem 0;
+            padding: 1rem;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .metric-value.danger {
+            color: #ff4444;
+            animation: pulse 1s infinite;
+        }
+
+        .metric-value.normal {
+            color: #00c853;
+        }
+
+        .metric-value.connected {
+            color: #00c853;
+        }
+
+        .metric-value.disconnected {
+            color: #ff4444;
+        }
+
+        .threshold-info {
+            font-size: 0.85rem;
+            color: #b3e5fc;
+            margin-top: 0.5rem;
+        }
+
+        .table-section {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .table-section h2 {
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
+            color: #00d4ff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 212, 255, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(255, 68, 68, 0.4);
+        }
+
+        .select-refresh {
+            padding: 10px 15px;
+            border: 2px solid #00d4ff;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            border: 2px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        .data-table thead {
+            background: rgba(0, 212, 255, 0.15);
+            border-bottom: 2px solid rgba(0, 212, 255, 0.4);
+        }
+
+        .data-table th {
+            padding: 1rem;
+            text-align: right;
+            font-weight: bold;
+            color: #00d4ff;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        .data-table tbody tr.alert-row {
+            background: rgba(255, 0, 0, 0.1);
+            border-left: 4px solid #ff0000;
+        }
+
+        .distance-badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .distance-badge.warning {
+            background: #ff6b6b;
+            color: #fff;
+        }
+
+        .distance-badge.safe {
+            background: #00c853;
+            color: #fff;
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            display: inline-block;
+            font-size: 0.9rem;
+        }
+
+        .status-badge.active {
+            background: #ff4444;
+            color: #fff;
+        }
+
+        .status-badge.inactive {
+            background: #00c853;
+            color: #fff;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #999;
+            padding: 2rem !important;
+        }
+
+        .notifications {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .notifications h3 {
+            color: #00d4ff;
+            margin-bottom: 1rem;
+        }
+
+        .notification {
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .notification.success {
+            background: rgba(0, 200, 83, 0.2);
+            border-left: 4px solid #00c853;
+            color: #00e676;
+        }
+
+        .notification.error {
+            background: rgba(255, 0, 0, 0.2);
+            border-left: 4px solid #ff0000;
+            color: #ff5252;
+        }
+
+        .notification.alarm {
+            background: rgba(255, 0, 0, 0.3);
+            border-left: 4px solid #ff0000;
+            color: #ff5252;
+            font-weight: bold;
+        }
+
+        .notification.info {
+            background: rgba(0, 212, 255, 0.2);
+            border-left: 4px solid #00d4ff;
+            color: #00e5ff;
+        }
+
+        .dashboard-footer {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(0, 0, 0, 0.4);
+            border-top: 2px solid rgba(0, 212, 255, 0.2);
+            margin-top: 2rem;
+            color: #b3e5fc;
+        }
+
+        .dashboard-footer p {
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .dashboard-header h1 {
+                font-size: 1.8rem;
+            }
+
+            .metrics-section {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+
+            .data-table {
+                font-size: 0.85rem;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.75rem 0.5rem;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .btn,
+            .select-refresh {
+                width: 100%;
+            }
+        }
+    </style>
+</body>
+</html>
