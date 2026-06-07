@@ -14,17 +14,24 @@ def init_db():
     conn.close()
 
 def send_telegram_alert(message):
-    # التوكن الذي نسخته من BotFather
     token = "8828447054:AAEBhzOFYXtn1IT83BDpz4LtZnAQwbhmzBs"
-    # الـ ID الذي حصلت عليه للتو من GetIdsBot
     chat_id = "7367505782" 
     
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}"
+    # تحويل الرسالة لرابط آمن باستخدام quote لضمان عمل الرموز التعبيرية
+    from urllib.parse import quote
+    msg_encoded = quote(message)
+    
+    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={msg_encoded}"
+    
     try:
-        requests.get(url)
+        # إضافة timeout لمحاولة تخطي مشكلة الـ DNS
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            print("Telegram Alert Sent Successfully!")
+        else:
+            print(f"Telegram Failed with status: {response.status_code}")
     except Exception as e:
         print("Telegram Alert Error:", e)
-
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
