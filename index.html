@@ -261,7 +261,7 @@
                 async refreshData() {
                     try {
                         // جلب الأحداث الأخيرة
-                        const eventsResponse = await fetch('http://localhost:5000/api/events?limit=50');
+                        const eventsResponse = await fetch('/api/events?limit=50');
                         if (eventsResponse.ok) {
                             this.sensorEvents = await eventsResponse.json();
                             
@@ -272,7 +272,7 @@
                         }
 
                         // جلب الإحصائيات
-                        const statsResponse = await fetch('http://localhost:5000/api/statistics');
+                        const statsResponse = await fetch('/api/statistics');
                         if (statsResponse.ok) {
                             this.statistics = await statsResponse.json();
                         }
@@ -289,7 +289,7 @@
                 async clearData() {
                     if (confirm('هل أنت متأكد من رغبتك في حذف جميع البيانات؟')) {
                         try {
-                            const response = await fetch('http://localhost:5000/api/clear-data', {
+                            const response = await fetch('/api/clear-data', {
                                 method: 'DELETE'
                             });
                             
