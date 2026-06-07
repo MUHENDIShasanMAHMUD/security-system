@@ -34,11 +34,6 @@ def send_telegram_alert(message):
 
 # داخل دالة receive_data في app.py
 @app.route('/api/sensor/data', methods=['POST'])
-def receive_data():
-    data = request.get_json()
-    if data['alarm']: # إذا كان هناك إنذار
-        send_telegram_alert(f"🚨 تنبيه: تم اكتشاف حركة! المسافة: {data['distance']} سم")
-    # ... بقية الكود
 
 if __name__ == '__main__':
     init_db()
