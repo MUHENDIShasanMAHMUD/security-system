@@ -15,21 +15,25 @@ def init_db():
 
 def send_telegram_alert(message):
     token = "8828447054:AAEBhzOFYXtn1IT83BDpz4LtZnAQwbhmzBs"
-    chat_id = "7367505782" 
+    chat_id = "7367505782"
     
-    # تحويل الرسالة لرابط آمن باستخدام quote لضمان عمل الرموز التعبيرية
     from urllib.parse import quote
     msg_encoded = quote(message)
-    
     url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={msg_encoded}"
     
+    # تعريف بروكسي عام لتجاوز حظر الـ DNS
+    proxies = {
+        'http': 'http://51.158.117.88:8811',
+        'https': 'http://51.158.117.88:8811'
+    }
+    
     try:
-        # إضافة timeout لمحاولة تخطي مشكلة الـ DNS
-        response = requests.get(url, timeout=10)
+        # إضافة proxies و timeout
+        response = requests.get(url, proxies=proxies, timeout=10)
         if response.status_code == 200:
-            print("Telegram Alert Sent Successfully!")
+            print("Telegram Alert Sent via Proxy!")
         else:
-            print(f"Telegram Failed with status: {response.status_code}")
+            print(f"Telegram Failed, Status: {response.status_code}")
     except Exception as e:
         print("Telegram Alert Error:", e)
 @app.route('/')
